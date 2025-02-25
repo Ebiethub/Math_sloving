@@ -1,102 +1,63 @@
 import streamlit as st
 from langchain_groq import ChatGroq
-from langchain.chains import LLMMathChain, LLMChain
+from langchain.chains import LLMChain
 from langchain.prompts import PromptTemplate
-from langchain_community.utilities import WikipediaAPIWrapper
-from langchain.agents.agent_types import AgentType
-from langchain.agents import Tool,initialize_agent 
-from langchain.callbacks import StreamlitCallbackHandler
-  
 
-## Setting up the streamlit app
-st.set_page_config(page_title="Text to math problem solver and Dada serch Assistant")
+# Initialize Groq API
+GROQ_API_KEY = st.secrets["GROQ_API_KEY"]  
+llm = ChatGroq(model_name="llama-3.3-70b-specdec", api_key=GROQ_API_KEY)
 
-
-groq_api_key = st.sidebar.text_input(label="Groq API Key", value=" ", type="password")
-
-if not groq_api_key:
-    st.info("Please add your api key to continue")
-    st.stop()
-
-llm = ChatGroq(model="Gemma2-9b-It", groq_api_key=groq_api_key)
-
-## Initializing the the tools
-wikipedia_wrapper=WikipediaAPIWrapper()
-wikipedia_tool=Tool(
-    name="wikipedia",
-    func=wikipedia_wrapper.run,
-    description="A toold for searching the internet to find the various information."
+# Define Prompt Templates
+assignment_prompt = PromptTemplate(
+    input_variables=["subject", "question"],
+    template="Provide a detailed answer for the {subject} question: {question}."
 )
 
-## Initializing the Math tool
-
-math_chain=LLMMathChain.from_llm(llm=llm)
-calculator=Tool(
-    name="calculator",
-    func=math_chain.run,
-    description="A tool for answering Maths related questions."
+math_prompt = PromptTemplate(
+    input_variables=["problem"],
+    template="Solve the following math problem step by step: {problem}."
 )
 
-prompt="""
-You are agent in solving mathematical problems. Logocally arrive at the solution
-and display it point wise for the question below.
-Question:{question}
-Answer:
-"""
-
-prompt_template=PromptTemplate(
-    input_variables=["question"],
-    template=prompt
+research_prompt = PromptTemplate(
+    input_variables=["topic"],
+    template="Provide a well-researched summary on the topic: {topic}."
 )
 
-## Maths problem tool. Combining all tools
-chain=LLMChain(llm=llm, prompt=prompt_template)
+# Create Chains
+assignment_chain = LLMChain(llm=llm, prompt=assignment_prompt)
+math_chain = LLMChain(llm=llm, prompt=math_prompt)
+research_chain = LLMChain(llm=llm, prompt=research_prompt)
 
-reasoning_tool=Tool(
-    name="Reason tool",
-    func=chain.run,
-    description="A tool for answering logic-based and reasoning questions"
-)
+# Streamlit UI
+st.set_page_config(page_title="Student AI Assistant", layout="wide")
+st.title("📚 AI Student Assistant")
 
-## Initialize agent
+# Assignment Help
+st.header("📝 Assignment Help")
+subject = st.text_input("Enter Subject:")
+question = st.text_area("Enter Assignment Question:")
+if st.button("Get Answer"):
+    response = assignment_chain.run({"subject": subject, "question": question})
+    st.write("### Answer:")
+    st.write(response)
 
-assistant_agent=initialize_agent(
-    tools=[wikipedia_tool,calculator,reasoning_tool],
-    agent=AgentType.ZERO_SHOT_REACT_DESRIPTION,
-    verbose=False,
-    handle_parsing_errors=True
-)
+# Math Problem Solver
+st.header("➗ Math Problem Solver")
+problem = st.text_area("Enter Math Problem:")
+if st.button("Solve Problem"):
+    solution = math_chain.run({"problem": problem})
+    st.write("### Solution:")
+    st.write(solution)
 
-if "messages" not in st.session_state.messages:
-    st.session_state["messages"]=[
-        {"role":"assistant","content":"Hi, I'm a MATH chatbot who can anser all your maths problems"}
-    ]
+# Research Assistance
+st.header("🔎 Research Assistance")
+topic = st.text_input("Enter Research Topic:")
+if st.button("Get Research Summary"):
+    research_summary = research_chain.run({"topic": topic})
+    st.write("### Research Summary:")
+    st.write(research_summary)
 
-for msg in st.session_state.messages:
-    st.chat_message(msg["role"]).write(msg["content"])
-
-"""
-## Function to generate the response
-def generate_response(user_question):
-    response=assistant_agent.invoke({'input':question})
-    return response
-"""
-## Interaction
-
-question=st.text_area("Enter your question:")
-
-if st.button("Answer"):
-    if question:
-        with st.spinner("Generate response..."):
-            st.session_state.messages.append({"role":"user","content":question})
-            st.chat_message("user").write(question)
-            
-            st_cb=StreamlitCallbackHandler(st.container(),expand_new_thoughts=False)
-            response=assistant_agent.run(st.session_state.messages,callbacks=[st_cb])
-
-            st.session_state.messages.append({'role':'assistant',"content":response})
-            st.write('## Response')
-            st.success(response)
-
-    else:
-        st.warning("Please enter the question")
+st.sidebar.header("🔗 AI Capabilities")
+st.sidebar.write("- Assignment Assistance")
+st.sidebar.write("- Math Problem Solving")
+st.sidebar.write("- Research Guidance")
